@@ -1,0 +1,17 @@
+# Archivos de la máquina y resultados de compilación
+.gradle/
+.kotlin/
+.idea/
+.vscode/
+.artifacts/
+**/build/
+android/.android_home/
+local.properties
+*.hprof
+*.log
+*.jks
+*.keystore
+captures/
+
+# El APK final se publica de forma explícita en releases/.
+releases/*.apk

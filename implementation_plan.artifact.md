@@ -1,44 +1,46 @@
-# Plan de Finalización: "App Total 100% Funcional"
+# Implementación completada: Créditos, Stock Avanzado y Descuentos
 
-Este plan transformará la aplicación de un prototipo a un producto final profesional, corrigiendo los botones inactivos y agregando las piezas que faltan para el usuario final.
+Este documento conserva el alcance histórico. Todas las fases descritas quedaron implementadas en la base de datos versión 7, incluida la migración conservadora desde la versión 5.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> Agregaremos un sistema de **Gráficos Reales** en el Dashboard, un sistema de **Compartir por WhatsApp/Email** real y un **Control de Inventario** avanzado.
+> La base de datos está en la **Versión 7** y cuenta con migraciones verificadas 5 → 6 → 7.
+>
+> [!WARNING]
+> La opción de **"Vender al Fiado" (Crédito)** aumentará automáticamente el saldo deudor del cliente seleccionado.
 
-## Proposed Changes
+## Cambios implementados
 
-### 1. Dashboard Inteligente
-*   **Gráfico de Ventas**: Implementar un gráfico de barras que muestre las ventas de los últimos 7 días.
-*   **Botones de Acción**: Hacer que los botones "Vender", "Stock", "PDF" y "Enviar" funcionen como accesos directos reales.
-*   **Resumen de Clientes**: Mostrar el número real de clientes registrados.
+### 1. Sistema de Créditos (Cuentas por Cobrar)
+*   **Modelo `Cliente`**: Añadir campo `deuda: Double`.
+*   **Punto de Venta**: Añadir método de pago "CRÉDITO". Al usarlo, la venta se marca como "Pendiente" y se suma al saldo del cliente.
+*   **Gestión de Deuda**: En la pantalla de Clientes, poder ver quién debe y registrar abonos.
 
-### 2. Control de Inventario Avanzado
-*   **Vista de Stock**: Una nueva sección para ver rápidamente qué productos se están agotando y reponerlos.
-*   **Movimientos**: Registrar cuándo se agregó stock manualmente.
+### 2. Control de Inventario con Historial (Kárdex)
+*   **Nueva Entidad `InventarioMovimiento`**: Registrará fecha, producto, cantidad (+ o -) y motivo (Venta, Reposición, Ajuste).
+*   **Dashboard**: Añadir un botón para ver el historial de movimientos de un producto.
 
-### 3. Conectividad y Compartición (Real)
-*   **Generador de Archivos**: Guardar el PDF en una carpeta temporal.
-*   **Compartir Nativo**: Usar el menú de compartir de Android para enviar el ticket a cualquier app (WhatsApp, Gmail, etc.).
-*   **Firma Digital**: Opción para agregar una firma o sello digital en la configuración.
+### 3. Top de Productos más Vendidos
+*   **Dashboard**: Implementar una lista visual de los 5 productos con más unidades vendidas. Esto dará una visión clara de qué es lo más popular.
 
-### 4. Herramientas de Administrador
-*   **Exportar a CSV/Excel**: Permitir al usuario descargar su historial de ventas en un archivo de Excel para su contabilidad.
-*   **Borrado Total**: Opción de limpiar la base de datos para empezar de cero (con confirmación).
+### 4. Descuentos en Ventas
+*   **Punto de Venta**: Añadir un campo de "Descuento" (Monto fijo). El total se recalculará restando este valor antes de aplicar impuestos.
+*   **PDF**: Mostrar el descuento aplicado en el ticket final.
 
-### 5. Pulido UX (Toque Final)
-*   **Feedback Visual**: Añadir sonidos suaves al cobrar y animaciones de "Éxito".
-*   **Validaciones**: Evitar que se vendan productos sin stock (opcional, configurable).
+### 5. Firma Digital y Logo (Mejora)
+*   Asegurar que la firma capturada se guarde como imagen y se incluya en el PDF generado.
 
 ---
 
-## Plan de Ejecución
-1.  **Dashboard**: Implementar el gráfico de ventas y activar los accesos rápidos.
-2.  **Módulo de Compartir**: Configurar `FileProvider` para que Android permita enviar los PDFs generados.
-3.  **Inventario**: Añadir la gestión de stock bajo.
-4.  **Exportación**: Crear la utilidad para generar archivos CSV de las ventas.
+## Ejecución completada
+1.  **Fase 1: Estructura de Datos**: completada.
+2.  **Fase 2: Lógica de Crédito**: completada.
+3.  **Fase 3: UI de Venta**: completada.
+4.  **Fase 4: Dashboard Pro**: completada.
+5.  **Fase 5: Documentos**: completada.
 
-## Verification Plan
-1.  **Venta Completa**: Realizar una venta -> Ver cómo sube el gráfico -> Compartir el ticket por WhatsApp -> Verificar que el stock bajó.
-2.  **Exportación**: Descargar el CSV y abrirlo en el visor de archivos.
+## Verificación automatizada
+1.  **Venta a Crédito**: Cliente A tiene deuda $0 -> Venta crédito $50 -> Cliente A ahora debe $50.
+2.  **Kárdex**: Vender 2 unidades -> El historial debe mostrar "-2 unidades (Venta)".
+3.  **Descuento**: Producto $100 -> Descuento $10 -> Total $90.

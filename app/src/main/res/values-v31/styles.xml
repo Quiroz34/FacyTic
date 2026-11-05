@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.TiketeFactura" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#101A36</item>
+        <item name="android:statusBarColor">#101A36</item>
+        <item name="android:navigationBarColor">#101A36</item>
+        <item name="android:windowSplashScreenBackground">#101A36</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#5552C7</item>
+    </style>
+</resources>

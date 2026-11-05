@@ -29,7 +29,8 @@ data class Cliente(
     val nombre: String,
     val telefono: String? = null,
     val correo: String? = null,
-    val direccion: String? = null
+    val direccion: String? = null,
+    val deuda: Double = 0.0 // Nuevo: Deuda acumulada
 )
 
 @Dao
@@ -62,7 +63,11 @@ data class Producto(
     val descripcion: String? = null,
     val categoriaId: Int? = null,
     val stock: Double = 0.0,
-    val codigoBarras: String? = null
+    val codigoBarras: String? = null,
+    val costo: Double = 0.0,
+    val stockMinimo: Double = 5.0,
+    val proveedor: String = "",
+    val unidad: String = "PZA"
 )
 
 @Dao
@@ -77,6 +82,25 @@ interface ProductoDao {
     suspend fun delete(p: Producto)
 }
 
+// --- MOVIMIENTO DE INVENTARIO ---
+@Entity(tableName = "inventario_movimientos")
+data class InventarioMovimiento(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val productoId: Int,
+    val productoNombre: String,
+    val cantidad: Double,
+    val tipo: String, // "ENTRADA", "VENTA", "AJUSTE"
+    val fecha: String
+)
+
+@Dao
+interface InventarioDao {
+    @Query("SELECT * FROM inventario_movimientos ORDER BY id DESC")
+    fun getRecientes(): Flow<List<InventarioMovimiento>>
+    @Insert
+    suspend fun insert(m: InventarioMovimiento)
+}
+
 // --- GASTO ---
 @Entity(tableName = "gastos")
 data class Gasto(
@@ -84,7 +108,9 @@ data class Gasto(
     val descripcion: String,
     val monto: Double,
     val fecha: String,
-    val categoria: String // Renta, Luz, Mercancia, etc.
+    val categoria: String,
+    val metodo: String = "EFECTIVO",
+    val cajaId: Int? = null
 )
 
 @Dao
@@ -93,6 +119,8 @@ interface GastoDao {
     fun getAll(): Flow<List<Gasto>>
     @Insert
     suspend fun insert(g: Gasto)
+    @Update
+    suspend fun update(g: Gasto)
     @Delete
     suspend fun delete(g: Gasto)
 }
@@ -109,7 +137,9 @@ data class Empresa(
     val mensajePie: String? = "¡Gracias por su preferencia!",
     val logoUri: String? = null,
     val impuestoActivo: Boolean = true,
-    val impuestoPorcentaje: Double = 15.0
+    val impuestoPorcentaje: Double = 15.0,
+    val permitirSinStock: Boolean = false,
+    val formatoPapel: String = "A4"
 )
 
 @Dao
@@ -124,16 +154,25 @@ interface EmpresaDao {
 @Entity(tableName = "documentos")
 data class Documento(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val tipo: String, // "FACTURA" o "TICKET"
+    val tipo: String,
     val numero: String,
     val fecha: String,
     val clienteNombre: String? = "Consumidor Final",
     val clienteId: Int? = null,
     val subtotal: Double = 0.0,
+    val descuento: Double = 0.0, // Nuevo: Descuento aplicado
     val impuesto: Double = 0.0,
     val total: Double = 0.0,
-    val estado: String = "PAGADA",
-    val metodoPago: String = "EFECTIVO" // Efectivo, Tarjeta, Transferencia
+    val estado: String = "PAGADA", // "PAGADA" o "PENDIENTE"
+    val metodoPago: String = "EFECTIVO",
+    val impuestoPorcentaje: Double = 0.0,
+    val firma: String? = null,
+    val abonado: Double = 0.0,
+    val efectivoRecibido: Double = 0.0,
+    val costoTotal: Double = 0.0,
+    val cajaId: Int? = null,
+    val empresaSnapshot: String? = null,
+    val motivoAnulacion: String? = null
 )
 
 @Entity(
@@ -152,7 +191,10 @@ data class DocumentoItem(
     val nombre: String,
     val cantidad: Double,
     val precio: Double,
-    val subtotal: Double
+    val subtotal: Double,
+    val productoId: Int? = null,
+    val costo: Double = 0.0,
+    val unidad: String = "PZA"
 )
 
 data class DocumentoConItems(
@@ -170,6 +212,13 @@ interface DocumentoDao {
     @Insert
     suspend fun insertDocumento(d: Documento): Long
 
+    @Update
+    suspend fun update(d: Documento)
+
+    @Transaction
+    @Query("SELECT * FROM documentos WHERE id = :id")
+    suspend fun find(id: Int): DocumentoConItems?
+
     @Insert
     suspend fun insertItems(items: List<DocumentoItem>)
 
@@ -181,17 +230,67 @@ interface DocumentoDao {
     }
 }
 
+@Entity(tableName = "abonos")
+data class Abono(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val clienteId: Int,
+    val documentoId: Int?,
+    val monto: Double,
+    val fecha: String,
+    val metodo: String = "EFECTIVO",
+    val cajaId: Int? = null
+)
+
+@Entity(tableName = "cajas")
+data class Caja(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val apertura: String,
+    val fondo: Double,
+    val cierre: String? = null,
+    val contado: Double? = null,
+    val esperado: Double? = null
+)
+
+@Dao
+interface OperacionesDao {
+    @Query("SELECT * FROM reembolsos ORDER BY id DESC")
+    fun reembolsos(): Flow<List<Reembolso>>
+    @Insert suspend fun insertReembolso(r: Reembolso): Long
+    @Query("SELECT * FROM abonos ORDER BY id DESC")
+    fun abonos(): Flow<List<Abono>>
+    @Query("SELECT * FROM cajas ORDER BY id DESC")
+    fun cajas(): Flow<List<Caja>>
+    @Query("SELECT * FROM cajas WHERE cierre IS NULL ORDER BY id DESC LIMIT 1")
+    suspend fun cajaAbierta(): Caja?
+    @Insert suspend fun insertAbono(a: Abono): Long
+    @Insert suspend fun insertCaja(c: Caja): Long
+    @Update suspend fun updateCaja(c: Caja)
+}
+
+@Entity(tableName = "reembolsos")
+data class Reembolso(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val documentoId: Int,
+    val monto: Double,
+    val metodo: String,
+    val fecha: String,
+    val cajaId: Int?,
+    val motivo: String
+)
+
 // --- DATABASE ---
 @Database(
-    entities = [Producto::class, Empresa::class, Documento::class, DocumentoItem::class, Categoria::class, Cliente::class, Gasto::class], 
-    version = 5, 
+    entities = [Producto::class, Empresa::class, Documento::class, DocumentoItem::class, Categoria::class, Cliente::class, Gasto::class, InventarioMovimiento::class, Abono::class, Caja::class, Reembolso::class],
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun operacionesDao(): OperacionesDao
     abstract fun productoDao(): ProductoDao
     abstract fun empresaDao(): EmpresaDao
     abstract fun documentoDao(): DocumentoDao
     abstract fun categoriaDao(): CategoriaDao
     abstract fun clienteDao(): ClienteDao
     abstract fun gastoDao(): GastoDao
+    abstract fun inventarioDao(): InventarioDao
 }

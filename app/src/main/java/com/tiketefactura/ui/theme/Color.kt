@@ -3,20 +3,20 @@ package com.tiketefactura.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // --- PALETA CLEAN LIGHT (MODERNA) ---
-val Background = Color(0xFFFFFFFF)      // Blanco puro
-val Surface = Color(0xFFF8FAFC)         // Gris muy claro para tarjetas
-val SurfaceLight = Color(0xFFF1F5F9)    // Gris para inputs
-val Border = Color(0xFFE2E8F0)          // Bordes sutiles
+val Background = Color(0xFFF7F8F5)
+val Surface = Color(0xFFFFFFFF)
+val SurfaceLight = Color(0xFFF0F4F2)
+val Border = Color(0xFFDCE5E1)
 
-val Primary = Color(0xFF6366F1)         // Indigo vibrante
-val PrimaryDark = Color(0xFF4F46E5)
-val Secondary = Color(0xFFEC4899)        // Rosa vibrante para acentos
+val Primary = Color(0xFF075E5A)
+val PrimaryDark = Color(0xFF064946)
+val Secondary = Color(0xFF297C76)
 
-val TextPrimary = Color(0xFF0F172A)     // Slate oscuro (Casi negro)
-val TextSecondary = Color(0xFF475569)   // Slate medio
-val TextMuted = Color(0xFF94A3B8)       // Slate claro
+val TextPrimary = Color(0xFF16211F)
+val TextSecondary = Color(0xFF53615E)
+val TextMuted = Color(0xFF84918E)
 
-val Success = Color(0xFF10B981)         // Esmeralda
-val Warning = Color(0xFFF59E0B)         // Ámbar
-val Error = Color(0xFFEF4444)           // Rojo
-val Info = Color(0xFF3B82F6)            // Blue
+val Success = Color(0xFF16856F)
+val Warning = Color(0xFFB46A14)
+val Error = Color(0xFFB3261E)
+val Info = Color(0xFF376B9B)
