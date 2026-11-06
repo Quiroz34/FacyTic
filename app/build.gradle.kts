@@ -8,21 +8,42 @@ plugins {
 
 android {
     namespace = "com.tiketefactura"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tiketefactura.v2"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        targetSdk = 36
+        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 3
+        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.2.0"
+
+        val revenueCatKey = providers.gradleProperty("REVENUECAT_GOOGLE_API_KEY").orNull.orEmpty()
+        buildConfigField("String", "REVENUECAT_GOOGLE_API_KEY", "\"${revenueCatKey.replace("\"", "\\\"")}\"")
+        val freeTrialDays = providers.gradleProperty("FREE_TRIAL_DAYS").orNull?.toLongOrNull()?.coerceIn(1L, 365L) ?: 5L
+        buildConfigField("long", "FREE_TRIAL_DAYS", "${freeTrialDays}L")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    val uploadStoreFile = providers.gradleProperty("UPLOAD_STORE_FILE").orNull
+    val uploadStorePassword = providers.gradleProperty("UPLOAD_STORE_PASSWORD").orNull
+    val uploadKeyAlias = providers.gradleProperty("UPLOAD_KEY_ALIAS").orNull
+    val uploadKeyPassword = providers.gradleProperty("UPLOAD_KEY_PASSWORD").orNull
+    signingConfigs {
+        if (listOf(uploadStoreFile, uploadStorePassword, uploadKeyAlias, uploadKeyPassword).all { !it.isNullOrBlank() }) {
+            create("upload") {
+                storeFile = file(uploadStoreFile!!)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("upload")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -36,6 +57,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -85,4 +107,8 @@ dependencies {
     
     // Barcode Scanning (Placeholder for now, but ready for future)
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // Suscripciones de Google Play administradas por RevenueCat
+    implementation("com.revenuecat.purchases:purchases:10.15.1")
+    implementation("com.revenuecat.purchases:purchases-ui:10.15.1")
 }

@@ -34,7 +34,7 @@ fun AppRoot(vm: MainViewModel = hiltViewModel()) {
         window.statusBarColor = color; window.navigationBarColor = color
         WindowCompat.getInsetsController(window, view).apply { isAppearanceLightStatusBars = vm.ready; isAppearanceLightNavigationBars = vm.ready }
     }
-    if (vm.ready) MainScreen(vm) else {
+    if (vm.ready) SubscriptionGate { MainScreen(vm) } else {
         BrandSplash()
         vm.startupError?.let { message -> AlertDialog(onDismissRequest = {}, title = { Text("No se pudieron cargar los datos") }, text = { Text(message) }, confirmButton = { TextButton(onClick = vm::load) { Text("Reintentar") } }) }
     }

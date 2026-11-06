@@ -124,6 +124,7 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
             TextButton(onClick = { recoveryExport.launch("TiketeFactura-recuperacion.json") }) { Text("Exportar copia anterior a la restauración") }
             TextButton(onClick = { vm.action("CSV preparado") { val f = File(context.cacheDir, "Ventas.csv"); f.writeText(Sharing.csv(docs)); withContext(Dispatchers.Main) { Sharing.file(context, f, "text/csv") } } }) { Text("Exportar ventas a CSV para Excel") }
         } }
+        item { SubscriptionCard() }
     }
     restore?.let { text -> Confirm("Reemplazar datos con respaldo", "Se reemplazarán los datos locales. Primero se conservará una copia de recuperación dentro de la aplicación. Restaura un respaldo que hayas creado y reconocido.", { restore = null }) {
         vm.action("Respaldo restaurado", after = { restore = null; vm.clear(); vm.receipt = null; vm.paymentReceipt = null }) {
