@@ -28,6 +28,7 @@ internal fun ProductsScreen(vm: MainViewModel, products: List<Producto>, categor
             if (filtered.isEmpty()) item { Empty("No hay productos. Agrega uno para comenzar.") }
             items(filtered, key = { it.id }) { p -> CardBlock(p.nombre) {
                 Text("${money(p.precio)} por ${unitName(p.unidad)} · Stock ${formatQuantity(p.stock, p.unidad)} · Costo ${money(p.costo)}")
+                if (p.favorito) Text("★ Favorito en venta rápida", color = MaterialTheme.colorScheme.primary)
                 if (!p.codigoBarras.isNullOrBlank()) Text("Código: ${p.codigoBarras}"); if (p.proveedor.isNotBlank()) Text("Proveedor: ${p.proveedor}")
                 Row { TextButton(onClick = { editing = p }) { Text("Editar") }; TextButton(onClick = { deleting = p }) { Text("Eliminar") } }
             } }
@@ -43,6 +44,7 @@ private fun ProductEditor(vm: MainViewModel, p: Producto, categories: List<Categ
     var cost by remember { mutableStateOf(initial(p.costo)) }; var stock by remember { mutableStateOf(initial(p.stock)) }
     var minimum by remember { mutableStateOf(initial(p.stockMinimo)) }; var code by remember { mutableStateOf(p.codigoBarras.orEmpty()) }
     var supplier by remember { mutableStateOf(p.proveedor) }; var unit by remember { mutableStateOf(p.unidad) }; var cat by remember { mutableStateOf(p.categoriaId) }; var error by remember { mutableStateOf<String?>(null) }
+    var favorite by remember { mutableStateOf(p.favorito) }
     AlertDialog(onDismissRequest = dismiss, title = { Text(if (p.id == 0) "Nuevo producto" else "Editar producto") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Input("Nombre", name, { name = it }); Input("Precio de venta", price, { price = it }, true); Input("Costo de compra", cost, { cost = it }, true)
@@ -51,11 +53,12 @@ private fun ProductEditor(vm: MainViewModel, p: Producto, categories: List<Categ
             Text("Unidad: ${unitName(unit)}. Kilogramos y litros aceptan decimales, por ejemplo 0.5.", style = MaterialTheme.typography.bodySmall)
             Input("Stock mínimo", minimum, { minimum = it }, true); Input("Código de barras", code, { code = it }); BarcodePhoto(vm) { code = it }
             Input("Proveedor", supplier, { supplier = it })
+            Row(verticalAlignment = Alignment.CenterVertically) { Text("Mostrar en venta rápida", Modifier.weight(1f)); Switch(favorite, { favorite = it }) }
             Choices(listOf("Sin categoría") + categories.map { it.nombre }, categories.find { it.id == cat }?.nombre ?: "Sin categoría") { selected -> cat = categories.find { it.nombre == selected }?.id }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }, confirmButton = { TextButton(onClick = { try {
-        val value = p.copy(nombre = name.trim(), precio = number(price), costo = number(cost), stock = number(stock), stockMinimo = number(minimum), codigoBarras = code.trim().ifBlank { null }, proveedor = supplier.trim(), categoriaId = cat, unidad = unit)
+        val value = p.copy(nombre = name.trim(), precio = number(price), costo = number(cost), stock = number(stock), stockMinimo = number(minimum), codigoBarras = code.trim().ifBlank { null }, proveedor = supplier.trim(), categoriaId = cat, unidad = unit, favorito = favorite)
         vm.action(after = dismiss) { vm.repository.product(value) }
     } catch (e: Exception) { error = e.message } }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancelar") } })
 }

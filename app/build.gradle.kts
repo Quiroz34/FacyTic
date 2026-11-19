@@ -14,8 +14,8 @@ android {
         applicationId = "com.tiketefactura.v2"
         minSdk = 24
         targetSdk = 36
-        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 3
-        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.2.0"
+        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 6
+        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.3.2"
 
         val revenueCatKey = providers.gradleProperty("REVENUECAT_GOOGLE_API_KEY").orNull.orEmpty()
         buildConfigField("String", "REVENUECAT_GOOGLE_API_KEY", "\"${revenueCatKey.replace("\"", "\\\"")}\"")

@@ -11,6 +11,9 @@ local.properties
 *.log
 *.jks
 *.keystore
+*.apk
+*.aab
+*.idsig
 captures/
 
 # El APK final se publica de forma explícita en releases/.

@@ -81,10 +81,11 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
     val context = LocalContext.current
     var name by rememberSaveable { mutableStateOf("") }; var ruc by rememberSaveable { mutableStateOf("") }; var address by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }; var slogan by rememberSaveable { mutableStateOf("") }; var footer by rememberSaveable { mutableStateOf("") }
+    var showContact by rememberSaveable { mutableStateOf(true) }; var emergencyPhone by rememberSaveable { mutableStateOf("") }; var showEmergency by rememberSaveable { mutableStateOf(false) }
     var tax by rememberSaveable { mutableStateOf(true) }; var rate by rememberSaveable { mutableStateOf("15") }; var noStock by rememberSaveable { mutableStateOf(false) }
     var paper by rememberSaveable { mutableStateOf("A4") }; var logo by remember { mutableStateOf<String?>(null) }; var restore by remember { mutableStateOf<String?>(null) }
     var printer by remember { mutableStateOf(false) }
-    LaunchedEffect(company) { company?.let { name = it.nombre; ruc = it.ruc.orEmpty(); address = it.direccion.orEmpty(); phone = it.telefono.orEmpty(); slogan = it.eslogan.orEmpty(); footer = it.mensajePie.orEmpty(); tax = it.impuestoActivo; rate = initial(it.impuestoPorcentaje); noStock = it.permitirSinStock; paper = it.formatoPapel; logo = it.logoUri } }
+    LaunchedEffect(company) { company?.let { name = it.nombre; ruc = it.ruc.orEmpty(); address = it.direccion.orEmpty(); phone = it.telefono.orEmpty(); slogan = it.eslogan.orEmpty(); footer = it.mensajePie.orEmpty(); showContact = it.mostrarContactoTicket; emergencyPhone = it.telefonoEmergencia.orEmpty(); showEmergency = it.mostrarEmergenciaTicket; tax = it.impuestoActivo; rate = initial(it.impuestoPorcentaje); noStock = it.permitirSinStock; paper = it.formatoPapel; logo = it.logoUri } }
     val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) {
         var encoded: String? = null
         vm.action("Logo cargado; guarda los ajustes", after = { logo = encoded }) {
@@ -111,11 +112,15 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
             TextButton(onClick = { logoPicker.launch("image/*") }) { Text(if (logo == null) "Agregar logo" else "Cambiar logo cargado") }; if (logo != null) TextButton(onClick = { logo = null }) { Text("Quitar logo") }
         } }
         item { CardBlock("Ventas y comprobantes") {
+            Text("Teléfonos en el ticket", fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) { Text("Mostrar número de contacto", Modifier.weight(1f)); Switch(showContact, { showContact = it }) }
+            Input("Número de emergencia", emergencyPhone, { emergencyPhone = it })
+            Row(verticalAlignment = Alignment.CenterVertically) { Text("Mostrar número de emergencia", Modifier.weight(1f)); Switch(showEmergency, { showEmergency = it }) }
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Impuesto activo", Modifier.weight(1f)); Switch(tax, { tax = it }) }; Input("Porcentaje de impuesto", rate, { rate = it }, true)
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Permitir ventas sin stock", Modifier.weight(1f)); Switch(noStock, { noStock = it }) }
             Text("Papel: A4 o ticket en mm"); Choices(listOf("A4", "58", "80"), paper) { paper = it }
             OutlinedButton(onClick = { printer = true }) { Text("Configurar impresora Bluetooth") }
-            Button(onClick = { try { val e = Empresa(nombre = name.trim(), ruc = ruc, direccion = address, telefono = phone, eslogan = slogan, mensajePie = footer, logoUri = logo, impuestoActivo = tax, impuestoPorcentaje = number(rate), permitirSinStock = noStock, formatoPapel = paper); vm.action { vm.repository.company(e) } } catch (e: Exception) { vm.error = e.message } }) { Text("Guardar ajustes") }
+            Button(onClick = { try { require(!showEmergency || emergencyPhone.isNotBlank()) { "Escribe el número de emergencia o desactiva su impresión" }; val e = Empresa(nombre = name.trim(), ruc = ruc, direccion = address, telefono = phone, eslogan = slogan, mensajePie = footer, logoUri = logo, impuestoActivo = tax, impuestoPorcentaje = number(rate), permitirSinStock = noStock, formatoPapel = paper, mostrarContactoTicket = showContact, telefonoEmergencia = emergencyPhone.trim(), mostrarEmergenciaTicket = showEmergency); vm.action { vm.repository.company(e) } } catch (e: Exception) { vm.error = e.message } }) { Text("Guardar ajustes") }
         } }
         item { CardBlock("Respaldo y exportación") {
             Text("El respaldo incluye clientes, ventas, inventario, caja, ajustes, logos y firmas guardados en esta versión.")

@@ -67,7 +67,8 @@ data class Producto(
     val costo: Double = 0.0,
     val stockMinimo: Double = 5.0,
     val proveedor: String = "",
-    val unidad: String = "PZA"
+    val unidad: String = "PZA",
+    val favorito: Boolean = false
 )
 
 @Dao
@@ -139,7 +140,10 @@ data class Empresa(
     val impuestoActivo: Boolean = true,
     val impuestoPorcentaje: Double = 15.0,
     val permitirSinStock: Boolean = false,
-    val formatoPapel: String = "A4"
+    val formatoPapel: String = "A4",
+    val mostrarContactoTicket: Boolean = true,
+    val telefonoEmergencia: String? = null,
+    val mostrarEmergenciaTicket: Boolean = false
 )
 
 @Dao
@@ -281,7 +285,7 @@ data class Reembolso(
 // --- DATABASE ---
 @Database(
     entities = [Producto::class, Empresa::class, Documento::class, DocumentoItem::class, Categoria::class, Cliente::class, Gasto::class, InventarioMovimiento::class, Abono::class, Caja::class, Reembolso::class],
-    version = 8,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

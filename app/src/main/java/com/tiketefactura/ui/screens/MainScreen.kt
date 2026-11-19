@@ -119,7 +119,7 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
                         1 -> SaleScreen(vm, products, categories, clients, company)
                         2 -> ProductsScreen(vm, products, categories)
                         3 -> ClientsScreen(vm, clients, docs, payments)
-                        4 -> HistoryScreen(vm, docs, company)
+                        4 -> HistoryScreen(vm, docs, company, clients)
                         5 -> InventoryScreen(vm, products, movements)
                         6 -> ExpensesScreen(vm, expenses)
                         7 -> CashScreen(vm, boxes, docs, payments, expenses, refunds)
@@ -130,7 +130,7 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
             }
         }
     }
-    vm.receipt?.let { doc -> DocumentDialog(doc, company, { vm.receipt = null }, vm) }
+    vm.receipt?.let { doc -> DocumentDialog(doc, company, { vm.receipt = null }, vm, clients.find { it.id == doc.documento.clienteId }) }
     vm.paymentReceipt?.let { (client, list) ->
         val context = LocalContext.current
         AlertDialog(onDismissRequest = { vm.paymentReceipt = null }, title = { Text("Abono registrado") }, text = { Text("${client.nombre}\n${money(list.sumOf { it.monto })}\nSe generó el recibo de pago.") },
@@ -250,6 +250,15 @@ private fun Dashboard(docs: List<DocumentoConItems>, expenses: List<Gasto>, prod
         item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             QuickAction("Nueva venta", "Crear cobro", Icons.Default.AddShoppingCart, true, { navigate(1) }, Modifier.weight(1f))
             QuickAction("Caja", "Abrir o cerrar", Icons.Default.AccountBalanceWallet, false, { navigate(7) }, Modifier.weight(1f))
+        } }
+        item { Text("Accesos rápidos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickAction("Productos", "Precios y existencias", Icons.Default.Inventory2, false, { navigate(2) }, Modifier.weight(1f))
+            QuickAction("Clientes", "Contactos y saldos", Icons.Default.People, false, { navigate(3) }, Modifier.weight(1f))
+        } }
+        item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickAction("Comprobantes", "Imprimir o enviar", Icons.AutoMirrored.Filled.ReceiptLong, false, { navigate(4) }, Modifier.weight(1f))
+            QuickAction("Ajustes", "Negocio e impresora", Icons.Default.Settings, false, { navigate(8) }, Modifier.weight(1f))
         } }
         item { CardBlock("Cobros por método") { methods.filter { it != "CRÉDITO" }.forEach { m ->
             val value = docs.filter { included(it.documento.fecha) }.filter { it.documento.metodoPago == m }.sumOf { it.documento.total } + payments.filter { it.metodo == m && included(it.fecha) }.sumOf { it.monto } - refunds.filter { it.metodo == m && included(it.fecha) }.sumOf { it.monto }

@@ -40,6 +40,9 @@ class BusinessRepository @Inject constructor(val db: AppDatabase) {
             put("nombre", company.nombre); put("ruc", company.ruc); put("direccion", company.direccion)
             put("telefono", company.telefono); put("eslogan", company.eslogan); put("mensajePie", company.mensajePie)
             put("logoUri", company.logoUri); put("formatoPapel", company.formatoPapel)
+            put("mostrarContactoTicket", company.mostrarContactoTicket)
+            put("telefonoEmergencia", company.telefonoEmergencia)
+            put("mostrarEmergenciaTicket", company.mostrarEmergenciaTicket)
         }.toString()
         val id = db.documentoDao().insertDocumento(Documento(tipo = type, numero = "BORRADOR", fecha = timestamp,
             clienteNombre = client?.nombre ?: clientName.ifBlank { "Consumidor Final" }, clienteId = client?.id,

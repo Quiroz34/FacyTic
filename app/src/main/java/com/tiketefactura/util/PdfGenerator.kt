@@ -29,8 +29,9 @@ object PdfGenerator {
     }
     private class Writer(private val width: Int) {
         val pdf = PdfDocument()
+        private val thermal = width < 300
         private val height = if (width < 300) 1000 else 842
-        private val margin = if (width < 300) 12f else 36f
+        private val margin = if (thermal) 10f else 36f
         private var page: PdfDocument.Page? = null
         private var y = margin
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -40,7 +41,7 @@ object PdfGenerator {
             page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, ++index).create()); y = margin
         }
         private fun room(h: Float) { if (page == null || y + h > height - margin) start() }
-        fun text(value: String, bold: Boolean = false, size: Float = if (width < 300) 9f else 11f) {
+        fun text(value: String, bold: Boolean = false, size: Float = if (thermal) 12f else 11f) {
             paint.textSize = size; paint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             value.split('\n').forEach { paragraph ->
                 var remaining = paragraph
@@ -53,6 +54,34 @@ object PdfGenerator {
                 }
             }
         }
+        fun centered(value: String, bold: Boolean = false, size: Float = if (thermal) 12f else 11f) {
+            paint.textSize = size; paint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            var remaining = value
+            while (remaining.isNotEmpty()) {
+                val fit = paint.breakText(remaining, true, width - 2 * margin, null).coerceAtLeast(1)
+                val cut = if (fit < remaining.length) remaining.lastIndexOf(' ', fit).takeIf { it > 0 } ?: fit else fit
+                val line = remaining.take(cut)
+                room(size * 1.5f)
+                page!!.canvas.drawText(line, (width - paint.measureText(line)) / 2f, y + size, paint)
+                y += size * 1.5f; remaining = remaining.drop(cut).trimStart()
+            }
+        }
+        fun row(left: String, right: String, bold: Boolean = false, size: Float = if (thermal) 12f else 11f) {
+            paint.textSize = size; paint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            val rightWidth = paint.measureText(right)
+            val leftWidth = (width - 2 * margin - rightWidth - paint.measureText("  ")).coerceAtLeast(width * .3f)
+            val fit = paint.breakText(left, true, leftWidth, null).coerceAtLeast(1)
+            val shownLeft = if (fit < left.length) left.take((fit - 1).coerceAtLeast(1)).trimEnd() + "…" else left
+            room(size * 1.6f)
+            page!!.canvas.drawText(shownLeft, margin, y + size, paint)
+            page!!.canvas.drawText(right, width - margin - rightWidth, y + size, paint)
+            y += size * 1.6f
+        }
+        fun divider() {
+            room(10f); paint.strokeWidth = if (thermal) 1.5f else 1f
+            page!!.canvas.drawLine(margin, y + 4f, width - margin, y + 4f, paint); y += 10f
+        }
+        fun space(size: Float = 5f) { room(size); y += size }
         fun image(value: String?, maxHeight: Float) {
             val b = bitmap(value) ?: return
             val scale = minOf((width - margin * 2) / b.width, maxHeight / b.height)
@@ -65,27 +94,54 @@ object PdfGenerator {
         val d = full.documento
         val snapshot = d.empresaSnapshot?.let { runCatching { JSONObject(it) }.getOrNull() }
         fun field(key: String, fallback: String?) = if (snapshot == null) fallback.orEmpty() else if (snapshot.isNull(key)) "" else snapshot.optString(key)
+        fun enabled(key: String, fallback: Boolean) = if (snapshot == null || !snapshot.has(key)) fallback else snapshot.optBoolean(key, fallback)
         val format = paperOverride ?: field("formatoPapel", current?.formatoPapel ?: "A4")
         val w = Writer(when (format) { "58" -> 164; "80" -> 226; else -> 595 })
         w.image(field("logoUri", current?.logoUri), 60f)
-        w.text(field("nombre", current?.nombre ?: "Mi Negocio"), true, 16f)
-        listOf(field("eslogan", current?.eslogan), field("ruc", current?.ruc), field("direccion", current?.direccion), field("telefono", current?.telefono)).filter { it.isNotBlank() }.forEach { w.text(it) }
-        w.text("${d.tipo} ${d.numero}", true); w.text(d.fecha)
-        w.text("Cliente: ${d.clienteNombre}"); w.text("Pago: ${d.metodoPago} · ${d.estado}")
+        w.centered(field("nombre", current?.nombre ?: "Mi Negocio"), true, 17f)
+        field("eslogan", current?.eslogan).takeIf { it.isNotBlank() }?.let { w.centered(it) }
+        listOf(field("ruc", current?.ruc), field("direccion", current?.direccion)).filter { it.isNotBlank() }.forEach { w.centered(it) }
+        if (enabled("mostrarContactoTicket", current?.mostrarContactoTicket ?: true)) {
+            field("telefono", current?.telefono).takeIf { it.isNotBlank() }?.let { w.centered("Contacto: $it") }
+        }
+        if (enabled("mostrarEmergenciaTicket", current?.mostrarEmergenciaTicket ?: false)) {
+            field("telefonoEmergencia", current?.telefonoEmergencia).takeIf { it.isNotBlank() }?.let { w.centered("Emergencias: $it", true) }
+        }
+        w.divider()
+        w.centered(d.tipo, true, 15f)
+        w.centered(d.numero, true, 14f)
+        w.centered(d.fecha)
+        w.space()
+        w.text("DATOS DE LA VENTA", true)
+        w.text("Cliente: ${d.clienteNombre}")
+        w.text("Forma de pago: ${d.metodoPago}")
+        w.text("Estado: ${d.estado}", true)
         d.motivoAnulacion?.let { w.text("ANULADA: $it", true) }
-        w.text("--------------------------------")
+        w.divider()
+        w.text("PRODUCTOS", true)
         fun unitName(unit: String) = when (unit) { "KG" -> "kg"; "L" -> "L"; else -> "pieza" }
         fun quantity(value: Double) = java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
-        full.items.forEach { i -> w.text(i.nombre, true); w.text("${quantity(i.cantidad)} ${unitName(i.unidad)} x ${money(i.precio)} = ${money(i.subtotal)}") }
-        w.text("--------------------------------")
-        w.text("Subtotal: ${money(d.subtotal)}")
-        w.text("Descuento: -${money(d.descuento)}")
-        w.text("Impuesto (${d.impuestoPorcentaje}%): ${money(d.impuesto)}")
-        w.text("TOTAL: ${money(d.total)}", true, 14f)
-        if (d.metodoPago == "EFECTIVO") { w.text("Recibido: ${money(d.efectivoRecibido)}"); w.text("Cambio: ${money((d.efectivoRecibido - d.total).coerceAtLeast(0.0))}") }
-        if (d.metodoPago == "CRÉDITO") { w.text("Abonado: ${money(d.abonado)}"); w.text("Saldo: ${money(if (d.estado == "ANULADA") 0.0 else d.total - d.abonado)}") }
+        full.items.forEach { i ->
+            w.text(i.nombre, true)
+            w.row("${quantity(i.cantidad)} ${unitName(i.unidad)} x ${money(i.precio)}", money(i.subtotal))
+        }
+        w.divider()
+        w.text("RESUMEN", true)
+        w.row("Subtotal", money(d.subtotal))
+        if (d.descuento > 0) w.row("Descuento", "-${money(d.descuento)}")
+        if (d.impuesto > 0) w.row("Impuesto (${d.impuestoPorcentaje}%)", money(d.impuesto))
+        w.divider()
+        w.row("TOTAL", money(d.total), true, 16f)
+        if (d.metodoPago == "EFECTIVO") {
+            w.row("Efectivo recibido", money(d.efectivoRecibido))
+            w.row("CAMBIO", money((d.efectivoRecibido - d.total).coerceAtLeast(0.0)), true, 14f)
+        }
+        if (d.metodoPago == "CRÉDITO") {
+            w.row("Abonado", money(d.abonado))
+            w.row("SALDO PENDIENTE", money(if (d.estado == "ANULADA") 0.0 else d.total - d.abonado), true, 14f)
+        }
         if (!d.firma.isNullOrBlank()) { w.text("Firma del cliente"); w.image(d.firma, 100f) }
-        w.text(field("mensajePie", current?.mensajePie))
+        field("mensajePie", current?.mensajePie).takeIf { it.isNotBlank() }?.let { w.space(8f); w.centered(it, true) }
         return w.save(File(context.cacheDir, "${d.numero}${paperOverride?.let { "-${it}mm" }.orEmpty()}.pdf"))
     }
     fun receipt(context: Context, client: Cliente, payments: List<Abono>): File {

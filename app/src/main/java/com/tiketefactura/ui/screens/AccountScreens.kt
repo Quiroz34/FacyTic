@@ -56,19 +56,25 @@ private fun AccountDialog(vm: MainViewModel, client: Cliente, docs: List<Documen
 }
 
 @Composable
-internal fun HistoryScreen(vm: MainViewModel, docs: List<DocumentoConItems>, company: Empresa?) {
+internal fun HistoryScreen(vm: MainViewModel, docs: List<DocumentoConItems>, company: Empresa?, clients: List<Cliente>) {
     var query by rememberSaveable { mutableStateOf("") }; var start by rememberSaveable { mutableStateOf("") }; var end by rememberSaveable { mutableStateOf("") }
     var method by rememberSaveable { mutableStateOf("Todos") }; var state by rememberSaveable { mutableStateOf("Todos") }
+    var type by rememberSaveable { mutableStateOf("Todos") }; var period by rememberSaveable { mutableStateOf("Todos") }
     var selected by remember { mutableStateOf<DocumentoConItems?>(null) }; var cancel by remember { mutableStateOf<DocumentoConItems?>(null) }
     val context = LocalContext.current
     val from = BusinessRules.datePart(start); val until = BusinessRules.datePart(end)
     val datePattern = Regex("\\d{4}-\\d{2}-\\d{2}")
     val validDates = (start.isBlank() || datePattern.matches(start) && from != null) && (end.isBlank() || datePattern.matches(end) && until != null) && (from == null || until == null || !from.isAfter(until))
+    val today = java.time.LocalDate.now()
+    val periodStart = when (period) { "Hoy" -> today; "7 días" -> today.minusDays(6); "Este mes" -> today.withDayOfMonth(1); else -> null }
     val filtered = docs.filter { full -> val d = full.documento; val day = BusinessRules.datePart(d.fecha)
-        validDates && (d.numero.contains(query, true) || d.clienteNombre.orEmpty().contains(query, true)) && (method == "Todos" || d.metodoPago == method) && (state == "Todos" || d.estado == state) &&
+        validDates && (d.numero.contains(query, true) || d.clienteNombre.orEmpty().contains(query, true)) && (method == "Todos" || d.metodoPago == method) && (state == "Todos" || d.estado == state) && (type == "Todos" || d.tipo == type) &&
+            (periodStart == null || day != null && !day.isBefore(periodStart) && !day.isAfter(today)) &&
             (from == null || day != null && !day.isBefore(from)) && (until == null || day != null && !day.isAfter(until)) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Input("Buscar folio o cliente", query, { query = it })
+        Text("Período", fontWeight = FontWeight.SemiBold); Choices(listOf("Hoy", "7 días", "Este mes", "Todos"), period) { period = it }
+        Text("Tipo de comprobante", fontWeight = FontWeight.SemiBold); Choices(listOf("Todos", "TICKET", "FACTURA"), type) { type = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Input("Desde AAAA-MM-DD", start, { start = it }, modifier = Modifier.weight(1f)); Input("Hasta AAAA-MM-DD", end, { end = it }, modifier = Modifier.weight(1f)) }
         if (!validDates) Text("Revisa el formato o el orden de las fechas", color = MaterialTheme.colorScheme.error)
         Choices(listOf("Todos") + methods, method) { method = it }; Choices(listOf("Todos", "PAGADA", "PENDIENTE", "ANULADA"), state) { state = it }
@@ -77,27 +83,31 @@ internal fun HistoryScreen(vm: MainViewModel, docs: List<DocumentoConItems>, com
             if (filtered.isEmpty()) item { Empty("No hay comprobantes con estos filtros") }
             items(filtered, key = { it.documento.id }) { full -> val d = full.documento; CardBlock("${d.numero} · ${money(d.total)}") {
                 Text("${d.clienteNombre} · ${d.fecha}"); Text("${d.metodoPago} · ${d.estado}")
-                Row { TextButton(onClick = { selected = full }) { Text("Ver comprobante") }; if (d.estado != "ANULADA") TextButton(onClick = { cancel = full }) { Text("Cancelar / devolver") } }
+                Row { Button(onClick = { selected = full }) { Text("Ver y enviar") }; if (d.estado != "ANULADA") TextButton(onClick = { cancel = full }) { Text("Cancelar / devolver") } }
             } }
         }
     }
-    selected?.let { val latest = docs.find { d -> d.documento.id == it.documento.id } ?: it; DocumentDialog(latest, company, { selected = null }, vm) }
+    selected?.let { val latest = docs.find { d -> d.documento.id == it.documento.id } ?: it; DocumentDialog(latest, company, { selected = null }, vm, clients.find { c -> c.id == latest.documento.clienteId }) }
     cancel?.let { full -> FormDialog("Cancelar y devolver venta completa", listOf(Field("r", "Motivo y confirmación del reembolso")), { cancel = null }) { values, close ->
         vm.action("Venta anulada e inventario restituido", after = close) { vm.repository.cancel(full.documento.id, values.getValue("r")) }
     } }
 }
 @Composable
-internal fun DocumentDialog(full: DocumentoConItems, company: Empresa?, dismiss: () -> Unit, vm: MainViewModel) {
+internal fun DocumentDialog(full: DocumentoConItems, company: Empresa?, dismiss: () -> Unit, vm: MainViewModel, client: Cliente? = null) {
     val context = LocalContext.current; val d = full.documento
     var bluetooth by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = dismiss, title = { Text(d.numero) }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${d.clienteNombre} · ${d.fecha}"); Text("${d.estado} · ${d.metodoPago}"); full.items.forEach { Text("${it.cantidad} × ${it.nombre}: ${money(it.subtotal)}") }
+    AlertDialog(onDismissRequest = dismiss, title = { Column { Text("Comprobante listo"); Text(d.numero, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("${d.tipo} · ${d.estado}", fontWeight = FontWeight.Bold); Text("${d.clienteNombre} · ${d.fecha}"); Text("Pago: ${d.metodoPago}"); full.items.forEach { Text("${it.cantidad} × ${it.nombre}: ${money(it.subtotal)}") }
         Text("Subtotal: ${money(d.subtotal)}\nDescuento: ${money(d.descuento)}\nImpuesto: ${money(d.impuesto)}\nTotal: ${money(d.total)}")
         if (d.metodoPago == "CRÉDITO") Text("Abonado: ${money(d.abonado)} · Saldo: ${money(if (d.estado == "ANULADA") 0.0 else d.total - d.abonado)}")
         d.motivoAnulacion?.let { Text("Motivo: $it") }; if (!d.firma.isNullOrBlank()) Text("Incluye firma del cliente")
-        Button(onClick = { runCatching { PdfGenerator.generateAndPrint(context, full, company) }.onFailure { vm.error = it.message } }) { Text("Imprimir / guardar PDF") }
-        Button(onClick = { bluetooth = true }) { Text("Imprimir ticket Bluetooth") }
-        OutlinedButton(onClick = { vm.action("PDF preparado") { val file = PdfGenerator.create(context, full, company); withContext(Dispatchers.Main) { Sharing.file(context, file, "application/pdf") } } }) { Text("Compartir PDF") }
+        HorizontalDivider()
+        Text("¿Qué deseas hacer?", fontWeight = FontWeight.Bold)
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { bluetooth = true }) { Text("Imprimir ticket") }
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { runCatching { PdfGenerator.generateAndPrint(context, full, company) }.onFailure { vm.error = it.message } }) { Text("Imprimir o guardar PDF") }
+        Button(modifier = Modifier.fillMaxWidth(), onClick = { vm.action("Abriendo WhatsApp") { val file = PdfGenerator.create(context, full, company); withContext(Dispatchers.Main) { Sharing.whatsapp(context, file, full, client) } } }) { Text("Enviar por WhatsApp") }
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { vm.action("Abriendo correo") { val file = PdfGenerator.create(context, full, company); withContext(Dispatchers.Main) { Sharing.email(context, file, full, client) } } }) { Text(if (client?.correo.isNullOrBlank()) "Enviar por correo (elegir destinatario)" else "Enviar a ${client?.correo}") }
+        TextButton(modifier = Modifier.fillMaxWidth(), onClick = { vm.action("PDF preparado") { val file = PdfGenerator.create(context, full, company); withContext(Dispatchers.Main) { Sharing.file(context, file, "application/pdf") } } }) { Text("Compartir con otra aplicación") }
     } }, confirmButton = { TextButton(onClick = dismiss) { Text("Cerrar") } })
     if (bluetooth) PrinterDialog(vm, full, company) { bluetooth = false }
 }

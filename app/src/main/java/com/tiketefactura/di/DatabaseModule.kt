@@ -65,11 +65,25 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE documento_items ADD COLUMN unidad TEXT NOT NULL DEFAULT 'PZA'")
         }
     }
+    /** Adds optional contact and emergency numbers to printed tickets. */
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE empresa ADD COLUMN mostrarContactoTicket INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE empresa ADD COLUMN telefonoEmergencia TEXT")
+            db.execSQL("ALTER TABLE empresa ADD COLUMN mostrarEmergenciaTicket INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+    /** Adds favorite products for the quick-sale screen. */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE productos ADD COLUMN favorito INTEGER NOT NULL DEFAULT 0")
+        }
+    }
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, "tikete_v2.db")
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .build()
     }
 

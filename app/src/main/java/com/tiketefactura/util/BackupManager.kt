@@ -13,7 +13,7 @@ object BackupManager {
     private val tables = listOf("categorias", "clientes", "productos", "empresa", "documentos", "documento_items", "inventario_movimientos", "gastos", "cajas", "abonos", "reembolsos")
     suspend fun export(db: AppDatabase): String = db.withTransaction {
         JSONObject().apply {
-            put("app", "TiketeFactura"); put("version", 8)
+            put("app", "TiketeFactura"); put("version", 10)
             val data = JSONObject()
             tables.forEach { table ->
                 val rows = JSONArray()
@@ -41,7 +41,7 @@ object BackupManager {
 
     private fun restoreRows(sql: SupportSQLiteDatabase, root: JSONObject) {
         val backupVersion = root.getInt("version")
-        require(root.getString("app") == "TiketeFactura" && backupVersion in 7..8) { "El respaldo no es compatible" }
+        require(root.getString("app") == "TiketeFactura" && backupVersion in 7..10) { "El respaldo no es compatible" }
         val data = root.getJSONObject("tables")
         require(data.keys().asSequence().toSet() == tables.toSet()) { "El respaldo está incompleto" }
         val columns = tables.associateWith { table ->
@@ -53,6 +53,12 @@ object BackupManager {
             for (i in 0 until rows.length()) {
                 val row = rows.getJSONObject(i)
                 if (backupVersion == 7 && table in setOf("productos", "documento_items") && !row.has("unidad")) row.put("unidad", "PZA")
+                if (backupVersion < 9 && table == "empresa") {
+                    row.put("mostrarContactoTicket", 1)
+                    row.put("telefonoEmergencia", JSONObject.NULL)
+                    row.put("mostrarEmergenciaTicket", 0)
+                }
+                if (backupVersion < 10 && table == "productos") row.put("favorito", 0)
                 require(row.keys().asSequence().toSet() == columns[table]) { "Columnas inválidas: $table" }
             }
         }
