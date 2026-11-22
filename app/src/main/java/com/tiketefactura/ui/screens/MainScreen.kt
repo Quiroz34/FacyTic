@@ -1,5 +1,9 @@
 package com.tiketefactura.ui.screens
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
@@ -46,6 +51,8 @@ private data class AppDestination(val title: String, val subtitle: String, val i
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(vm: MainViewModel = hiltViewModel()) {
+    val appContext = LocalContext.current
+    var showInitialTutorial by rememberSaveable { mutableStateOf(!tutorialWasCompleted(appContext)) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val destinations = listOf(
         AppDestination("Inicio", "El pulso de tu negocio", Icons.Default.Home),
@@ -56,34 +63,59 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
         AppDestination("Inventario", "Existencias y movimientos", Icons.Default.Warehouse),
         AppDestination("Gastos", "Registra las salidas del negocio", Icons.Default.Payments),
         AppDestination("Caja", "Aperturas, cobros y cierres", Icons.Default.AccountBalanceWallet),
-        AppDestination("Ajustes", "Personaliza y protege tus datos", Icons.Default.Settings)
+        AppDestination("Ajustes", "Personaliza y protege tus datos", Icons.Default.Settings),
+        AppDestination("Ayuda", "Tutorial, respuestas y contacto", Icons.AutoMirrored.Filled.HelpOutline)
     )
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    var lastBackAt by rememberSaveable { mutableLongStateOf(0L) }
     val products by vm.productos.collectAsState(); val clients by vm.clientes.collectAsState()
     val categories by vm.categorias.collectAsState(); val docs by vm.documentos.collectAsState()
     val company by vm.empresa.collectAsState(); val expenses by vm.gastos.collectAsState()
     val refunds by vm.reembolsos.collectAsState(); val movements by vm.movimientos.collectAsState(); val payments by vm.abonos.collectAsState(); val boxes by vm.cajas.collectAsState()
     LaunchedEffect(products, vm.busy) { vm.refreshCart(products) }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
-    ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-        ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).statusBarsPadding().padding(24.dp)) {
-                LogoPreview(company?.logoUri, Modifier.size(56.dp))
-                Spacer(Modifier.height(16.dp))
-                Text(company?.nombre ?: "Tikete y Factura", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Todo tu negocio en un solo lugar", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+    BackHandler {
+        if (drawer.isOpen || drawer.targetValue == DrawerValue.Open) scope.launch { drawer.close() }
+        else if (tab != 0) tab = 0
+        else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackAt < 2_000L) (appContext as? Activity)?.finish()
+            else {
+                lastBackAt = now
+                scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar("Desliza Atrás otra vez para salir") }
             }
-            Spacer(Modifier.height(12.dp))
-            destinations.forEachIndexed { i, destination -> NavigationDrawerItem(
-                icon = { Icon(destination.icon, null) },
-                label = { Text(destination.title) },
-                selected = i == tab,
-                onClick = { tab = i; scope.launch { drawer.close() } },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) }
+        }
+    }
+    ModalNavigationDrawer(drawerState = drawer, drawerContent = {
+        ModalDrawerSheet(Modifier.widthIn(max = 340.dp), drawerContainerColor = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))).statusBarsPadding().padding(24.dp)) {
+                Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .12f)) {
+                    LogoPreview(company?.logoUri, Modifier.padding(6.dp).size(52.dp))
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(company?.nombre?.takeIf { it.isNotBlank() } ?: "Tikete y Factura", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("Ventas, inventario y caja", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .76f), style = MaterialTheme.typography.bodySmall)
+            }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 10.dp)) {
+                destinations.forEachIndexed { i, destination ->
+                    if (i == 0) DrawerSectionLabel("Principal")
+                    if (i == 4) DrawerSectionLabel("Operación")
+                    if (i == 8) DrawerSectionLabel("Aplicación")
+                    NavigationDrawerItem(
+                        icon = { Icon(destination.icon, null) },
+                        label = { Column { Text(destination.title); Text(destination.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                        selected = i == tab,
+                        onClick = { tab = i; scope.launch { drawer.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = NavigationDrawerItemDefaults.colors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer, selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                    )
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text("Tikete y Factura", Modifier.padding(horizontal = 24.dp, vertical = 16.dp).navigationBarsPadding(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }, gesturesEnabled = !vm.busy) {
         Scaffold(
@@ -94,9 +126,10 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
                     Text(destinations[tab].subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } },
                 navigationIcon = { IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Default.Menu, "Abrir menú") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                actions = { if (tab != 9) IconButton(onClick = { tab = 9 }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, "Abrir ayuda") } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, scrolledContainerColor = MaterialTheme.colorScheme.surface)
             ) },
-            bottomBar = { NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
+            bottomBar = { NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
                 destinations.take(4).forEachIndexed { i, destination -> NavigationBarItem(
                     selected = tab == i,
                     onClick = { tab = i },
@@ -114,9 +147,9 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceContainerLow)))) {
                 Box(Modifier.widthIn(max = 1200.dp).fillMaxSize().align(Alignment.TopCenter).padding(horizontal = 16.dp)) {
-                    when (tab) {
+                    Crossfade(targetState = tab, animationSpec = tween(180), label = "Cambio de sección") { currentTab -> when (currentTab) {
                         0 -> Dashboard(docs, expenses, products, categories, clients, payments, refunds) { tab = it }
-                        1 -> SaleScreen(vm, products, categories, clients, company)
+                        1 -> SaleScreen(vm, products, categories, clients, company) { tab = 2 }
                         2 -> ProductsScreen(vm, products, categories)
                         3 -> ClientsScreen(vm, clients, docs, payments)
                         4 -> HistoryScreen(vm, docs, company, clients)
@@ -124,11 +157,16 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
                         6 -> ExpensesScreen(vm, expenses)
                         7 -> CashScreen(vm, boxes, docs, payments, expenses, refunds)
                         8 -> SettingsScreen(vm, company, docs)
-                    }
+                        9 -> HelpScreen()
+                    } }
                 }
                 if (vm.busy) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.12f)).clickable(onClick = {}), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
+    }
+    if (showInitialTutorial) TutorialDialog {
+        completeTutorial(appContext)
+        showInitialTutorial = false
     }
     vm.receipt?.let { doc -> DocumentDialog(doc, company, { vm.receipt = null }, vm, clients.find { it.id == doc.documento.clienteId }) }
     vm.paymentReceipt?.let { (client, list) ->
@@ -141,14 +179,29 @@ fun MainScreen(vm: MainViewModel = hiltViewModel()) {
 }
 
 @Composable
+private fun DrawerSectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        Modifier.padding(start = 28.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
 internal fun CardBlock(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (title != null) Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        if (title != null) Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(4.dp).height(20.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)))
+            Spacer(Modifier.width(10.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        }
         content()
     } }
 }
@@ -158,12 +211,13 @@ internal fun LogoPreview(data: String?, modifier: Modifier = Modifier) {
     if (bitmap != null) Image(bitmap, "Logo del negocio", modifier, contentScale = ContentScale.Fit)
     else Image(painterResource(R.drawable.ic_launcher_foreground), "Tikete y Factura", modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)))
 }
-@Composable internal fun Empty(text: String) {
+@Composable internal fun Empty(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer) {
             Icon(Icons.Default.Inbox, null, Modifier.padding(14.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary)
         }
         Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (actionLabel != null && onAction != null) Button(onClick = onAction) { Text(actionLabel) }
     }
 }
 @Composable
@@ -180,9 +234,11 @@ internal fun Choices(options: List<String>, value: String, onChange: (String) ->
     }
 }
 @Composable
-internal fun Input(label: String, value: String, onChange: (String) -> Unit, numeric: Boolean = false, modifier: Modifier = Modifier) {
+internal fun Input(label: String, value: String, onChange: (String) -> Unit, numeric: Boolean = false, modifier: Modifier = Modifier, isError: Boolean = false, supportingText: String? = null) {
     OutlinedTextField(
         value, onChange, modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true,
+        isError = isError,
+        supportingText = supportingText?.let { { Text(it) } },
         shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surface,

@@ -26,7 +26,7 @@ Antes de publicar esta política, reemplazar los siguientes campos y alojarla en
 HTTPS pública:
 
 - Responsable/desarrollador: **[NOMBRE LEGAL]**
-- Correo de privacidad y soporte: **[CORREO]**
+- Consultas de privacidad: utiliza los datos de contacto públicos del desarrollador disponibles en la ficha de Tikete y Factura en Google Play.
 - País y, si corresponde, domicilio: **[DATOS]**
 - URL de términos de uso: **[URL]**
 

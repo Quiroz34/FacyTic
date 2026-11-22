@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.tiketefactura.data.local.AppDatabase
+import com.tiketefactura.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -14,6 +15,8 @@ object BackupManager {
     suspend fun export(db: AppDatabase): String = db.withTransaction {
         JSONObject().apply {
             put("app", "TiketeFactura"); put("version", 10)
+            put("appVersion", BuildConfig.VERSION_NAME)
+            put("createdAt", java.time.OffsetDateTime.now().toString())
             val data = JSONObject()
             tables.forEach { table ->
                 val rows = JSONArray()

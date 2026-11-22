@@ -79,12 +79,15 @@ internal fun CashScreen(vm: MainViewModel, boxes: List<Caja>, docs: List<Documen
 @Composable
 internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<DocumentoConItems>) {
     val context = LocalContext.current
+    val backupPreferences = remember { context.getSharedPreferences("backup_status", android.content.Context.MODE_PRIVATE) }
+    var lastBackup by remember { mutableStateOf(backupPreferences.getString("last_backup", null)) }
     var name by rememberSaveable { mutableStateOf("") }; var ruc by rememberSaveable { mutableStateOf("") }; var address by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }; var slogan by rememberSaveable { mutableStateOf("") }; var footer by rememberSaveable { mutableStateOf("") }
     var showContact by rememberSaveable { mutableStateOf(true) }; var emergencyPhone by rememberSaveable { mutableStateOf("") }; var showEmergency by rememberSaveable { mutableStateOf(false) }
     var tax by rememberSaveable { mutableStateOf(true) }; var rate by rememberSaveable { mutableStateOf("15") }; var noStock by rememberSaveable { mutableStateOf(false) }
     var paper by rememberSaveable { mutableStateOf("A4") }; var logo by remember { mutableStateOf<String?>(null) }; var restore by remember { mutableStateOf<String?>(null) }
     var printer by remember { mutableStateOf(false) }
+    var section by rememberSaveable { mutableStateOf("Negocio") }
     LaunchedEffect(company) { company?.let { name = it.nombre; ruc = it.ruc.orEmpty(); address = it.direccion.orEmpty(); phone = it.telefono.orEmpty(); slogan = it.eslogan.orEmpty(); footer = it.mensajePie.orEmpty(); showContact = it.mostrarContactoTicket; emergencyPhone = it.telefonoEmergencia.orEmpty(); showEmergency = it.mostrarEmergenciaTicket; tax = it.impuestoActivo; rate = initial(it.impuestoPorcentaje); noStock = it.permitirSinStock; paper = it.formatoPapel; logo = it.logoUri } }
     val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) {
         var encoded: String? = null
@@ -96,7 +99,13 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
             encoded = PdfGenerator.encode(bitmap); bitmap.recycle()
         }
     } }
-    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.action("Respaldo guardado") { val json = BackupManager.export(vm.db); context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { it.write(json) } } }
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) {
+        val savedAt = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
+        vm.action("Respaldo guardado", after = { lastBackup = savedAt; backupPreferences.edit().putString("last_backup", savedAt).apply() }) {
+            val json = BackupManager.export(vm.db)
+            context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use { it.write(json) }
+        }
+    } }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) {
         var text = ""; vm.action("Respaldo leído; confirma la restauración", after = { restore = text }) { text = BackupManager.read(context, uri) }
     } }
@@ -104,14 +113,29 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
         val file = File(context.filesDir, "respaldo-antes-de-restaurar.json"); require(file.exists()) { "Todavía no hay copia de recuperación" }
         context.contentResolver.openOutputStream(uri, "wt")!!.use { output -> file.inputStream().use { it.copyTo(output) } }
     } }
+    fun saveSettings() {
+        try {
+            require(name.isNotBlank()) { "Escribe el nombre del negocio" }
+            require(!showEmergency || emergencyPhone.isNotBlank()) { "Escribe el número de emergencia o desactiva su impresión" }
+            val updated = Empresa(nombre = name.trim(), ruc = ruc, direccion = address, telefono = phone, eslogan = slogan, mensajePie = footer, logoUri = logo, impuestoActivo = tax, impuestoPorcentaje = number(rate), permitirSinStock = noStock, formatoPapel = paper, mostrarContactoTicket = showContact, telefonoEmergencia = emergencyPhone.trim(), mostrarEmergenciaTicket = showEmergency)
+            vm.action("Ajustes guardados") { vm.repository.company(updated) }
+        } catch (e: Exception) { vm.error = e.message }
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { CardBlock("Negocio") {
+        item {
+            Text("¿Qué deseas configurar?", style = MaterialTheme.typography.titleMedium)
+            Choices(listOf("Negocio", "Ventas", "Datos", "Plan", "Ayuda"), section) { section = it }
+        }
+        if (section == "Negocio") item { CardBlock("Datos del negocio") {
+            Text("Esta información identifica tu negocio y puede aparecer en los comprobantes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             LogoPreview(logo, Modifier.size(80.dp))
             Input("Nombre del negocio", name, { name = it }); Input("Identificación fiscal", ruc, { ruc = it }); Input("Dirección", address, { address = it })
             Input("Teléfono", phone, { phone = it }); Input("Eslogan", slogan, { slogan = it }); Input("Mensaje al pie", footer, { footer = it })
             TextButton(onClick = { logoPicker.launch("image/*") }) { Text(if (logo == null) "Agregar logo" else "Cambiar logo cargado") }; if (logo != null) TextButton(onClick = { logo = null }) { Text("Quitar logo") }
+            Button(onClick = ::saveSettings, modifier = Modifier.fillMaxWidth()) { Text("Guardar datos del negocio") }
         } }
-        item { CardBlock("Ventas y comprobantes") {
+        if (section == "Ventas") item { CardBlock("Ventas y comprobantes") {
+            Text("Define cómo se calculan y se imprimen tus ventas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Teléfonos en el ticket", fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Mostrar número de contacto", Modifier.weight(1f)); Switch(showContact, { showContact = it }) }
             Input("Número de emergencia", emergencyPhone, { emergencyPhone = it })
@@ -119,17 +143,19 @@ internal fun SettingsScreen(vm: MainViewModel, company: Empresa?, docs: List<Doc
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Impuesto activo", Modifier.weight(1f)); Switch(tax, { tax = it }) }; Input("Porcentaje de impuesto", rate, { rate = it }, true)
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Permitir ventas sin stock", Modifier.weight(1f)); Switch(noStock, { noStock = it }) }
             Text("Papel: A4 o ticket en mm"); Choices(listOf("A4", "58", "80"), paper) { paper = it }
-            OutlinedButton(onClick = { printer = true }) { Text("Configurar impresora Bluetooth") }
-            Button(onClick = { try { require(!showEmergency || emergencyPhone.isNotBlank()) { "Escribe el número de emergencia o desactiva su impresión" }; val e = Empresa(nombre = name.trim(), ruc = ruc, direccion = address, telefono = phone, eslogan = slogan, mensajePie = footer, logoUri = logo, impuestoActivo = tax, impuestoPorcentaje = number(rate), permitirSinStock = noStock, formatoPapel = paper, mostrarContactoTicket = showContact, telefonoEmergencia = emergencyPhone.trim(), mostrarEmergenciaTicket = showEmergency); vm.action { vm.repository.company(e) } } catch (e: Exception) { vm.error = e.message } }) { Text("Guardar ajustes") }
+            OutlinedButton(onClick = { printer = true }, modifier = Modifier.fillMaxWidth()) { Text("Configurar impresora Bluetooth") }
+            Button(onClick = ::saveSettings, modifier = Modifier.fillMaxWidth()) { Text("Guardar configuración de ventas") }
         } }
-        item { CardBlock("Respaldo y exportación") {
+        if (section == "Datos") item { CardBlock("Respaldo y exportación") {
             Text("El respaldo incluye clientes, ventas, inventario, caja, ajustes, logos y firmas guardados en esta versión.")
-            Button(onClick = { export.launch("TiketeFactura-${LocalDate.now()}.json") }) { Text("Guardar respaldo completo") }
-            OutlinedButton(onClick = { import.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) { Text("Restaurar respaldo") }
-            TextButton(onClick = { recoveryExport.launch("TiketeFactura-recuperacion.json") }) { Text("Exportar copia anterior a la restauración") }
-            TextButton(onClick = { vm.action("CSV preparado") { val f = File(context.cacheDir, "Ventas.csv"); f.writeText(Sharing.csv(docs)); withContext(Dispatchers.Main) { Sharing.file(context, f, "text/csv") } } }) { Text("Exportar ventas a CSV para Excel") }
+            Text(lastBackup?.let { "Último respaldo guardado: $it" } ?: "Todavía no has guardado un respaldo en este dispositivo.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = { export.launch("TiketeFactura-${LocalDate.now()}.json") }, modifier = Modifier.fillMaxWidth()) { Text("Guardar respaldo completo") }
+            OutlinedButton(onClick = { import.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) { Text("Restaurar respaldo") }
+            TextButton(onClick = { recoveryExport.launch("TiketeFactura-recuperacion.json") }, modifier = Modifier.fillMaxWidth()) { Text("Exportar copia de recuperación") }
+            TextButton(onClick = { vm.action("CSV preparado") { val f = File(context.cacheDir, "Ventas.csv"); f.writeText(Sharing.csv(docs)); withContext(Dispatchers.Main) { Sharing.file(context, f, "text/csv") } } }, modifier = Modifier.fillMaxWidth()) { Text("Exportar ventas para Excel") }
         } }
-        item { SubscriptionCard() }
+        if (section == "Plan") item { SubscriptionCard() }
+        if (section == "Ayuda") item { HelpAndCommunityCard() }
     }
     restore?.let { text -> Confirm("Reemplazar datos con respaldo", "Se reemplazarán los datos locales. Primero se conservará una copia de recuperación dentro de la aplicación. Restaura un respaldo que hayas creado y reconocido.", { restore = null }) {
         vm.action("Respaldo restaurado", after = { restore = null; vm.clear(); vm.receipt = null; vm.paymentReceipt = null }) {

@@ -25,7 +25,7 @@ internal fun ProductsScreen(vm: MainViewModel, products: List<Producto>, categor
         Input("Buscar por nombre o código", query, { query = it }); Choices(listOf("Todas") + categories.map { it.nombre }, category) { category = it }
         val filtered = products.filter { (it.nombre.contains(query, true) || it.codigoBarras.orEmpty().contains(query, true)) && (category == "Todas" || categories.find { c -> c.id == it.categoriaId }?.nombre == category) }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-            if (filtered.isEmpty()) item { Empty("No hay productos. Agrega uno para comenzar.") }
+            if (filtered.isEmpty()) item { Empty(if (query.isBlank()) "Aún no tienes productos. Crea el primero para comenzar a vender." else "No encontramos productos con esa búsqueda.", if (query.isBlank()) "Agregar primer producto" else null) { editing = Producto(nombre = "", precio = 0.0) } }
             items(filtered, key = { it.id }) { p -> CardBlock(p.nombre) {
                 Text("${money(p.precio)} por ${unitName(p.unidad)} · Stock ${formatQuantity(p.stock, p.unidad)} · Costo ${money(p.costo)}")
                 if (p.favorito) Text("★ Favorito en venta rápida", color = MaterialTheme.colorScheme.primary)

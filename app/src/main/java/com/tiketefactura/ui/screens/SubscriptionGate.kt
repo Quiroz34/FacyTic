@@ -24,38 +24,55 @@ import java.util.concurrent.TimeUnit
 
 private const val TRIAL_PREFS = "subscription_access"
 private const val TRIAL_STARTED_AT = "trial_started_at"
+private const val PREMIUM_VERIFIED_AT = "premium_verified_at"
+private const val PREMIUM_VALID_UNTIL = "premium_valid_until"
+private val PREMIUM_OFFLINE_GRACE = TimeUnit.DAYS.toMillis(3)
 
-/** Protege toda la aplicación después de los cinco días de prueba. */
+/** Protege toda la aplicación después de los doce días de prueba. */
 @OptIn(ExperimentalPreviewRevenueCatUIPurchasesAPI::class)
 @Composable
 internal fun SubscriptionGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val configured = BuildConfig.REVENUECAT_GOOGLE_API_KEY.isNotBlank()
-    val trialStartedAt = remember { trialStartedAt(context) }
     var premiumActive by remember { mutableStateOf<Boolean?>(null) }
+    var trialActive by remember { mutableStateOf<Boolean?>(null) }
+    var accessResolved by remember { mutableStateOf(!configured) }
     var showPaywall by remember { mutableStateOf(false) }
     var restoring by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    val remainingMs = (trialStartedAt + TimeUnit.DAYS.toMillis(BuildConfig.FREE_TRIAL_DAYS) - System.currentTimeMillis()).coerceAtLeast(0)
-    val trialActive = remainingMs > 0
+
+    fun applyCustomerInfo(customerInfo: CustomerInfo) {
+        premiumActive = customerInfo.entitlements.active.containsKey(PREMIUM_ENTITLEMENT)
+        savePremiumVerification(context, customerInfo)
+        val serverTrialStartedAt = customerInfo.firstSeen.time
+        saveTrialStartedAt(context, serverTrialStartedAt)
+        val trustedNow = maxOf(System.currentTimeMillis(), customerInfo.requestDate.time)
+        trialActive = trustedNow < serverTrialStartedAt +
+            TimeUnit.DAYS.toMillis(BuildConfig.FREE_TRIAL_DAYS)
+        accessResolved = true
+    }
 
     fun refreshEntitlement() {
         if (!configured) return
         Purchases.sharedInstance.getCustomerInfo(object : ReceiveCustomerInfoCallback {
             override fun onReceived(customerInfo: CustomerInfo) {
-                premiumActive = customerInfo.entitlements.active.containsKey(PREMIUM_ENTITLEMENT)
+                applyCustomerInfo(customerInfo)
             }
             override fun onError(error: PurchasesError) {
-                premiumActive = false
-                message = error.message
+                premiumActive = isStoredPremiumTrusted(context)
+                trialActive = isStoredTrialActive(context)
+                accessResolved = true
+                message = if (premiumActive == true || trialActive == true) "No pudimos actualizar tu suscripción. Puedes seguir trabajando y volveremos a intentarlo después."
+                else "No pudimos comprobar el acceso. Revisa tu conexión e inténtalo nuevamente."
             }
         })
     }
     LaunchedEffect(configured) { refreshEntitlement() }
 
     // Sin clave sólo se permite trabajar en builds de depuración. Un release falla cerrado.
-    val permitted = premiumActive == true || trialActive || (BuildConfig.DEBUG && !configured)
-    if (permitted) content() else SubscriptionLockedScreen(
+    val permitted = premiumActive == true || trialActive == true || (BuildConfig.DEBUG && !configured)
+    if (!accessResolved) SubscriptionLoadingScreen()
+    else if (permitted) content() else SubscriptionLockedScreen(
         configured = configured,
         restoring = restoring,
         message = message,
@@ -65,10 +82,10 @@ internal fun SubscriptionGate(content: @Composable () -> Unit) {
             Purchases.sharedInstance.restorePurchases(object : ReceiveCustomerInfoCallback {
                 override fun onReceived(customerInfo: CustomerInfo) {
                     restoring = false
-                    premiumActive = customerInfo.entitlements.active.containsKey(PREMIUM_ENTITLEMENT)
+                    applyCustomerInfo(customerInfo)
                     message = if (premiumActive == true) "Compra restaurada" else "No se encontró un plan activo"
                 }
-                override fun onError(error: PurchasesError) { restoring = false; message = error.message }
+                override fun onError(error: PurchasesError) { restoring = false; message = "No pudimos restaurar la compra. Revisa tu conexión y la cuenta de Google Play." }
             })
         }
     )
@@ -81,6 +98,15 @@ internal fun SubscriptionGate(content: @Composable () -> Unit) {
                 .setDismissRequest { showPaywall = false; refreshEntitlement() }
                 .build()
         )
+    }
+}
+
+@Composable
+private fun SubscriptionLoadingScreen() {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
     }
 }
 
@@ -104,9 +130,34 @@ private fun SubscriptionLockedScreen(configured: Boolean, restoring: Boolean, me
     }
 }
 
-private fun trialStartedAt(context: Context): Long {
+private fun saveTrialStartedAt(context: Context, startedAt: Long) {
     val prefs = context.getSharedPreferences(TRIAL_PREFS, Context.MODE_PRIVATE)
-    val stored = prefs.getLong(TRIAL_STARTED_AT, 0L)
-    if (stored > 0L) return stored
-    return System.currentTimeMillis().also { prefs.edit().putLong(TRIAL_STARTED_AT, it).apply() }
+    prefs.edit().putLong(TRIAL_STARTED_AT, startedAt).apply()
+}
+
+private fun savePremiumVerification(context: Context, customerInfo: CustomerInfo) {
+    val entitlement = customerInfo.entitlements.active[PREMIUM_ENTITLEMENT]
+    val verifiedAt = maxOf(System.currentTimeMillis(), customerInfo.requestDate.time)
+    val validUntil = entitlement?.expirationDate?.time ?: if (entitlement != null) Long.MAX_VALUE else 0L
+    context.getSharedPreferences(TRIAL_PREFS, Context.MODE_PRIVATE).edit()
+        .putLong(PREMIUM_VERIFIED_AT, if (entitlement != null) verifiedAt else 0L)
+        .putLong(PREMIUM_VALID_UNTIL, validUntil)
+        .apply()
+}
+
+private fun isStoredPremiumTrusted(context: Context): Boolean {
+    val prefs = context.getSharedPreferences(TRIAL_PREFS, Context.MODE_PRIVATE)
+    val verifiedAt = prefs.getLong(PREMIUM_VERIFIED_AT, 0L)
+    val validUntil = prefs.getLong(PREMIUM_VALID_UNTIL, 0L)
+    if (verifiedAt <= 0L || validUntil <= 0L) return false
+    val now = System.currentTimeMillis()
+    return now <= validUntil && now - verifiedAt <= PREMIUM_OFFLINE_GRACE
+}
+
+private fun isStoredTrialActive(context: Context): Boolean {
+    val startedAt = context.getSharedPreferences(TRIAL_PREFS, Context.MODE_PRIVATE)
+        .getLong(TRIAL_STARTED_AT, 0L)
+    if (startedAt <= 0L) return false
+    return System.currentTimeMillis() <
+        startedAt + TimeUnit.DAYS.toMillis(BuildConfig.FREE_TRIAL_DAYS)
 }

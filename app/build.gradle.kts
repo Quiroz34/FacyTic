@@ -14,12 +14,12 @@ android {
         applicationId = "com.tiketefactura.v2"
         minSdk = 24
         targetSdk = 36
-        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 6
-        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.3.2"
+        versionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 11
+        versionName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.4.2"
 
         val revenueCatKey = providers.gradleProperty("REVENUECAT_GOOGLE_API_KEY").orNull.orEmpty()
         buildConfigField("String", "REVENUECAT_GOOGLE_API_KEY", "\"${revenueCatKey.replace("\"", "\\\"")}\"")
-        val freeTrialDays = providers.gradleProperty("FREE_TRIAL_DAYS").orNull?.toLongOrNull()?.coerceIn(1L, 365L) ?: 5L
+        val freeTrialDays = providers.gradleProperty("FREE_TRIAL_DAYS").orNull?.toLongOrNull()?.coerceIn(1L, 365L) ?: 12L
         buildConfigField("long", "FREE_TRIAL_DAYS", "${freeTrialDays}L")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

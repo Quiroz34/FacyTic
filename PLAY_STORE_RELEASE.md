@@ -1,14 +1,14 @@
 # Publicación en Google Play y RevenueCat
 
-La aplicación está preparada con `compileSdk 36`, `targetSdk 36`, `versionCode 3`,
-`versionName 1.2.0` y el paquete `com.tiketefactura.v2`.
+La aplicación está preparada con `compileSdk 36`, `targetSdk 36`, `versionCode 11`,
+`versionName 1.4.2` y el paquete `com.tiketefactura.v2`.
 
 ## 1. Google Play Console
 
 1. Crear o abrir la aplicación con el paquete exacto `com.tiketefactura.v2`.
 2. Activar Play App Signing y conservar de forma segura la llave de carga.
 3. En **Monetización > Productos > Suscripciones**, crear:
-   - Producto `tikete_premium_monthly`, plan base auto-renovable mensual, precio México: **$85 MXN**. No crear una prueba gratuita en Google Play: la aplicación ya concede los 5 días de prueba y luego bloquea el acceso.
+   - Producto `tikete_premium_monthly`, plan base auto-renovable mensual. No crear una prueba gratuita adicional en Google Play: la aplicación concede 12 días y luego solicita un plan.
    - Producto `tikete_premium_annual`, plan base auto-renovable anual, precio México: **$900 MXN**.
 4. Activar ambos productos y completar los precios para los demás países. Google Play
    mostrará el precio localizado; RevenueCat no fija el importe.
@@ -53,7 +53,7 @@ que diga `jar is unsigned`.
 
 ### AAB para testers internos (20 días gratis)
 
-La app tiene 5 días gratis en producción. Para generar un AAB exclusivo para la pista
+La app tiene 12 días gratis en producción. Para generar un AAB exclusivo para la pista
 interna con 20 días, usa un código de versión superior y no promociones este artefacto a
 producción:
 
@@ -72,7 +72,7 @@ y con un `VERSION_CODE` superior a 4. Así la versión pública conserva los 5 d
   RevenueCat y restaurar la compra tras reinstalar.
 - Repetir con el anual y comprobar cancelación, expiración y periodo de gracia.
 - Verificar que el precio mostrado por Google Play sea $85 MXN y $900 MXN.
-- Confirmar que, tras vencer los 5 días de prueba de la aplicación sin entitlement
+- Confirmar que, tras vencer los 12 días de prueba de la aplicación sin entitlement
   `premium`, la aplicación no permite ejecutar ninguna función y muestra los planes.
 - Completar ficha, clasificación de contenido, público objetivo, seguridad de datos,
   acceso a la aplicación, anuncios y URL pública de privacidad.

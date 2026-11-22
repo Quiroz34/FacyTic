@@ -54,7 +54,7 @@ internal fun BarcodePhoto(vm: MainViewModel, found: (String) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories: List<Categoria>, clients: List<Cliente>, company: Empresa?) {
+internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories: List<Categoria>, clients: List<Cliente>, company: Empresa?, openProducts: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("quick-sale", android.content.Context.MODE_PRIVATE) }
     var quick by rememberSaveable { mutableStateOf(preferences.getBoolean("quick", true)) }
@@ -71,6 +71,11 @@ internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories:
     LaunchedEffect(quick, method, type) { preferences.edit().putBoolean("quick", quick).putString("method", method).putString("type", type).apply() }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { CardBlock("Modo de venta") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (quick) Icons.Default.Bolt else Icons.Default.Tune, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Column { Text(if (quick) "Venta rápida" else "Venta completa", style = MaterialTheme.typography.titleMedium); Text(if (cart.isEmpty()) "Carrito vacío" else "${cart.size} producto(s) seleccionado(s)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             Choices(listOf("RÁPIDA", "COMPLETA"), if (quick) "RÁPIDA" else "COMPLETA") { quick = it == "RÁPIDA" }
             Text(if (quick) "Agrega productos y cobra. Se usará Consumidor final y tus preferencias guardadas." else "Permite cliente, factura, crédito, descuento, impuesto y firma.", style = MaterialTheme.typography.bodySmall)
         } }
@@ -80,6 +85,9 @@ internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories:
             if (method == "CRÉDITO" && clientId == null) Text("Selecciona un cliente registrado para crédito", color = MaterialTheme.colorScheme.error)
         } }
         item { CardBlock("2. Agregar productos") {
+            if (products.isEmpty()) {
+                Empty("Primero agrega al menos un producto al catálogo.", "Ir a Productos", openProducts)
+            }
             val favorites = products.filter { it.favorito }.take(12)
             if (favorites.isNotEmpty() && query.isBlank()) {
                 Text("Favoritos", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
@@ -91,7 +99,7 @@ internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories:
             BarcodePhoto(vm) { code -> val p = products.find { it.codigoBarras == code }; if (p == null) vm.message = "Código no registrado: $code" else { vm.add(p); query = "" } }
             Choices(listOf("Todas") + categories.map { it.nombre }, category) { category = it }
             val filtered = products.filter { (it.nombre.contains(query, true) || it.codigoBarras.orEmpty().contains(query, true)) && (category == "Todas" || categories.find { c -> c.id == it.categoriaId }?.nombre == category) }.take(20)
-            if (filtered.isEmpty()) Text("No se encontraron productos")
+            if (filtered.isEmpty() && products.isNotEmpty()) Text("No encontramos productos con esos filtros. Prueba otra búsqueda.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             filtered.forEach { p -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text(p.nombre); Text("${money(p.precio)} por ${unitName(p.unidad)} · disponibles ${formatQuantity(p.stock, p.unidad)}", style = MaterialTheme.typography.bodySmall) }
                 IconButton(onClick = { vm.add(p) }, enabled = !vm.busy) { Icon(Icons.Default.AddCircle, "Agregar ${p.nombre}") }
@@ -118,7 +126,9 @@ internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories:
             totals?.let { Text("Subtotal: ${money(it.subtotal)}"); Text("Descuento: ${money(it.discount)}"); Text("Impuesto: ${money(it.tax)}"); Text("Total: ${money(it.total)}", style = MaterialTheme.typography.headlineSmall) }
             if (cart.isNotEmpty() && totals == null) Text(totalsResult.exceptionOrNull()?.message ?: "Revisa los importes", color = MaterialTheme.colorScheme.error)
             if (method == "EFECTIVO") {
-                Input("Efectivo recibido", cash, { cash = it }, true)
+                val cashValue = cash.trim().replace(',', '.').toDoubleOrNull()
+                val cashInsufficient = cash.isNotBlank() && totals != null && (cashValue == null || cashValue < totals.total)
+                Input("Efectivo recibido", cash, { cash = it }, true, isError = cashInsufficient, supportingText = if (cashInsufficient) "El importe debe cubrir el total de la venta." else null)
                 totals?.let { calculated ->
                     val suggestions = listOf(calculated.total, kotlin.math.ceil(calculated.total / 50.0) * 50.0, kotlin.math.ceil(calculated.total / 100.0) * 100.0, 500.0, 1000.0).filter { it >= calculated.total }.distinct().take(4)
                     Text("Importe rápido", style = MaterialTheme.typography.labelMedium)
@@ -126,9 +136,10 @@ internal fun SaleScreen(vm: MainViewModel, products: List<Producto>, categories:
                 }
                 val change = runCatching { number(cash) - (totals?.total ?: 0.0) }.getOrDefault(0.0); Text("Cambio: ${money(change.coerceAtLeast(0.0))}", style = MaterialTheme.typography.titleLarge)
             }
-            Button(enabled = !vm.busy && totals != null && (method != "CRÉDITO" || clientId != null), modifier = Modifier.fillMaxWidth(), onClick = {
+            val cashReady = method != "EFECTIVO" || runCatching { number(cash) >= (totals?.total ?: Double.MAX_VALUE) }.getOrDefault(false)
+            Button(enabled = !vm.busy && cart.isNotEmpty() && totals != null && cashReady && (method != "CRÉDITO" || clientId != null), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), onClick = {
                 try { if (method == "EFECTIVO") require(number(cash) >= totals!!.total) { "El efectivo recibido no cubre el total" }; if (quick) vm.sale("Consumidor final", null, "TICKET", method, 0.0, tax, if (method == "EFECTIVO") number(cash) else 0.0, null) { cash = "" } else signature = true } catch (e: Exception) { vm.error = e.message }
-            }) { Text("Cobrar y generar comprobante") }
+            }) { Icon(Icons.Default.CheckCircle, null); Spacer(Modifier.width(8.dp)); Text(totals?.let { "Cobrar ${money(it.total)}" } ?: "Cobrar y generar comprobante") }
             TextButton(onClick = { clear = true }, enabled = cart.isNotEmpty()) { Text("Vaciar carrito") }
         } }
     }

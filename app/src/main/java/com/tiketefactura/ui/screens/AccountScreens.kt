@@ -25,7 +25,7 @@ internal fun ClientsScreen(vm: MainViewModel, clients: List<Cliente>, docs: List
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(onClick = { editing = Cliente(nombre = "") }) { Text("Nuevo cliente") }; Input("Buscar cliente o teléfono", query, { query = it })
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-            if (clients.isEmpty()) item { Empty("Registra clientes para llevar sus créditos y abonos") }
+            if (clients.isEmpty()) item { Empty("Registra tu primer cliente para llevar créditos, saldos y abonos.", "Agregar primer cliente") { editing = Cliente(nombre = "") } }
             items(clients.filter { it.nombre.contains(query, true) || it.telefono.orEmpty().contains(query) }, key = { it.id }) { c -> CardBlock(c.nombre) {
                 Text("Saldo: ${money(c.deuda)}", fontWeight = FontWeight.Bold); c.telefono?.let { Text(it) }
                 Row { TextButton(onClick = { selected = c }) { Text("Estado de cuenta") }; TextButton(onClick = { editing = c }) { Text("Editar") }; TextButton(onClick = { deleting = c }) { Text("Eliminar") } }
